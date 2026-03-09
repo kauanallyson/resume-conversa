@@ -1,0 +1,11 @@
+# Environment variables
+.env
+
+# Docker volumes (if mapped locally instead of using Docker named volumes)
+/postgres_data
+/evolution_instances
+/n8n_data
+
+# OS generated files
+.DS_Store
+Thumbs.db

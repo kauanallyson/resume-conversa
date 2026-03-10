@@ -17,6 +17,7 @@ chmod +x install_docker.sh && sudo ./install_docker.sh
 ```
 
 O script faz automaticamente:
+
 - Instala Docker, Certbot e dependências
 - Abre as portas 80 e 443 no firewall
 - Cria swap de 2GB
@@ -28,6 +29,7 @@ O script faz automaticamente:
 ## Após a instalação
 
 Verifique os containers:
+
 ```bash
 docker compose ps
 docker compose logs -f

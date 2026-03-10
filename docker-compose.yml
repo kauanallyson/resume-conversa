@@ -12,10 +12,11 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
   redis:
     image: redis:alpine
     container_name: redis
@@ -30,21 +31,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-  nginx:
-      image: nginx:alpine
-      container_name: nginx
-      restart: unless-stopped
-      ports:
-        - "80:80"
-        - "443:443"
-      volumes:
-        - ./nginx/conf.d:/etc/nginx/conf.d
-        - ./nginx/certs:/etc/nginx/certs
-      networks:
-        - app_network
-      depends_on:
-        - n8n
-        - evolution
+
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
@@ -62,7 +49,7 @@ services:
       - EXECUTIONS_MODE=queue
       - N8N_HOST=${N8N_HOST}
       - N8N_PORT=5678
-      - N8N_PROTOCOL=https
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-https}
       - WEBHOOK_URL=${N8N_WEBHOOK_URL}
       - GENERIC_TIMEZONE=${N8N_TIMEZONE}
     ports:
@@ -76,3 +63,79 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  n8n-worker:
+    image: n8nio/n8n:latest
+    container_name: n8n-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - QUEUE_BULL_REDIS_PASSWORD=${REDIS_PASSWORD}
+      - EXECUTIONS_MODE=queue
+      - GENERIC_TIMEZONE=${N8N_TIMEZONE}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - app_network
+    depends_on:
+      - n8n
+
+  evolution:
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution_api
+    restart: unless-stopped
+    environment:
+      - SERVER_TYPE=http
+      - SERVER_PORT=${EVOLUTION_PORT:-8080}
+      - SERVER_URL=${EVOLUTION_SERVER_URL}
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${EVOLUTION_DB_NAME:-evolution}
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD}@redis:6379
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+    ports:
+      - "8080:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - app_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certs:/etc/nginx/certs
+      - /etc/letsencrypt:/etc/letsencrypt:ro # Mapeia os certificados do host
+    networks:
+      - app_network
+    depends_on:
+      - n8n
+      - evolution
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+  evolution_instances:
+
+networks:
+  app_network:
+    driver: bridge
